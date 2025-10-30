@@ -37,3 +37,45 @@ SOCIAL_MEMORY_CONFIG = {
 
 # Mental state types
 MENTAL_STATE_TYPES = ["Belief", "Desire", "Intention", "Emotion", "Thought"]
+
+# Sentiment analysis cues and weights (for heuristic fallback)
+SENTIMENT_CUES = {
+    "positive": [
+        "love", "like", "great", "good", "amazing", "fantastic", "happy", "satisfied",
+        "enjoy", "fast", "reliable", "recommend", "improve", "useful"
+    ],
+    "negative": [
+        "hate", "dislike", "bad", "terrible", "awful", "angry", "frustrated",
+        "annoy", "issue", "problem", "bug", "broken", "slow", "expensive",
+        "cancel", "return", "switch"
+    ],
+    "emotion": {
+        "positive": ["happy", "pleased", "excited", "satisfied", "delighted"],
+        "negative": ["angry", "upset", "sad", "annoyed", "frustrated", "disappointed"]
+    },
+    "intention": {
+        "positive": ["buy", "upgrade", "renew", "recommend", "subscribe"],
+        "negative": ["cancel", "return", "quit", "switch", "churn"]
+    },
+    "belief": {
+        "positive": ["is great", "works well", "fast", "reliable", "intuitive"],
+        "negative": ["is broken", "buggy", "slow", "confusing", "hard to use"]
+    }
+}
+
+SENTIMENT_WEIGHTS = {
+    # Universal lexical cues
+    "base_positive_cue": 0.5,
+    "base_negative_cue": 0.5,
+
+    # Type-specific cue weights
+    "emotion_positive": 0.4,
+    "emotion_negative": 0.4,
+    "intention_positive": 0.3,
+    "intention_negative": 0.3,
+    "belief_positive": 0.3,
+    "belief_negative": 0.3,
+
+    # Type priors
+    "desire_neg_prior": 0.2
+}

@@ -185,3 +185,89 @@ Output Format (Return only the optimized response text):
 [Your optimized response here]
 """
 }
+
+# Baseline Sentiment JSON Prompt
+BASELINE_SENTIMENT_JSON = """
+You are a sentiment analysis model. Analyze the user's sentiment strictly as JSON.
+
+Inputs:
+- User Input (u_t): {u_t}
+- Conversational Context (C_t):
+{C_t}
+
+Rules:
+- Output ONLY valid JSON. No preamble or code fences.
+- Schema:
+{{
+  "polarity": "positive|neutral|negative",
+  "intensity": 0.0-1.0,
+  "aspects": [{{"name": str, "sentiment": "positive|neutral|negative", "evidence": str}}],
+  "evidence": str,
+  "confidence": 0.0-1.0,
+  "source": "baseline"
+}}
+"""
+
+# MetaMind Sentiment Synthesis JSON Prompt
+SENTIMENT_SYNTHESIS_JSON = """
+You are consolidating sentiment from multiple mental-state hypotheses.
+
+Inputs:
+- User Input (u_t): {u_t}
+- Conversational Context (C_t):
+{C_t}
+- Top Hypotheses (H): JSON array with fields:
+  - explanation (str)
+  - type (Belief|Desire|Intention|Emotion|Thought|Unknown)
+  - score (float)
+  - p_cond (float)
+  - ig (float)
+
+Task:
+- Weigh hypotheses by score (primary), also consider p_cond and ig.
+- Produce a single sentiment summary with aspects and evidence.
+
+Rules:
+- Output ONLY valid JSON (no extra text).
+- Schema:
+{{
+  "polarity": "positive|neutral|negative",
+  "intensity": 0.0-1.0,
+  "aspects": [{{"name": str, "sentiment": "positive|neutral|negative", "evidence": str}}],
+  "evidence": str,
+  "confidence": 0.0-1.0,
+  "source": "metamind"
+}}
+- Ensure "source" is "metamind".
+- Use concise evidence quoting the user/context where possible.
+- If sentiment is mixed, prefer the dominant aspect-weighted polarity.
+- Confidence reflects agreement between top hypotheses.
+"""
+
+# Aspect Extraction JSON Prompt
+ASPECT_EXTRACTION_JSON = """
+Identify product-related aspects in the user's message and assign per-aspect sentiment.
+
+Inputs:
+- User Input (u_t): {u_t}
+- Conversational Context (C_t):
+{C_t}
+
+Guidance:
+- Focus on aspects like: product quality, UX/usability, performance, pricing/value, features, support.
+- Use brief evidence spans from the text where possible.
+
+Rules:
+- Output ONLY valid JSON. No preamble or code fences.
+- Schema:
+{{
+  "aspects": [{{"name": str, "sentiment": "positive|neutral|negative", "evidence": str}}]
+}}
+"""
+
+
+EXTRA_SENTIMENT_PROMPTS = {
+    "BASELINE_SENTIMENT_JSON": BASELINE_SENTIMENT_JSON,
+    "SENTIMENT_SYNTHESIS_JSON": SENTIMENT_SYNTHESIS_JSON,
+    "ASPECT_EXTRACTION_JSON": ASPECT_EXTRACTION_JSON,
+}
