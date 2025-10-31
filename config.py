@@ -1,17 +1,34 @@
 # Configuration settings for Metamind system
 
 # LLM API settings
-LLM_CONFIG = {
-    "api_key": "ollama",
-    "base_url": "http://localhost:11434/v1",
-    "model_name": "phi3:mini",
-    "temperature": 0.5,
-    "max_tokens": 1000
-}
+import os 
+
+# set to True to use OpenAI API (remote), False to use Ollama (local)
+USE_REMOTE = True
+
+if USE_REMOTE:
+    
+    LLM_CONFIG = {
+        "api_key": os.getenv("OPENAI_API_KEY"),  # stored as an environement variable
+        "base_url": "https://api.openai.com/v1",
+        "model_name": "gpt-3.5-turbo",  
+        "temperature": 0.7,
+        "max_tokens": 1000
+    }
+else:
+   
+    LLM_CONFIG = {
+        "api_key": "ollama",  # dummy key for local usage
+        "base_url": "http://localhost:11434/v1",
+        "model_name": "llama3:8b",
+        "temperature": 0.7,
+        "max_tokens": 1000
+    }
+
 
 # ToM Agent settings
 TOM_AGENT_CONFIG = {
-    "hypothesis_count_k": 3, 
+    "hypothesis_count_k": 7, 
     "target_diversity": 0.4,  
     "evidence_threshold": "medium-high"  
 }
