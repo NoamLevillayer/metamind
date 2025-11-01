@@ -12,7 +12,7 @@ if USE_REMOTE:
         "api_key": os.getenv("OPENAI_API_KEY"),  # stored as an environement variable
         "base_url": "https://api.openai.com/v1",
         "model_name": "gpt-3.5-turbo",  
-        "temperature": 0.7,
+        "temperature": 0.1,
         "max_tokens": 1000
     }
 else:
@@ -21,7 +21,7 @@ else:
         "api_key": "ollama",  # dummy key for local usage
         "base_url": "http://localhost:11434/v1",
         "model_name": "llama3:8b",
-        "temperature": 0.7,
+        "temperature": 0.1,
         "max_tokens": 1000
     }
 
