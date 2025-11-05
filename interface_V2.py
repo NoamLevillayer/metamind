@@ -2,11 +2,12 @@ import json
 from typing import Any, Dict, List
 import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder
-from analysis.sentiment import metamind_sentiment_json
 from baselines.raw_sentiment import baseline_sentiment_json
 from config import LLM_CONFIG
 from llm_interface import OpenAILLM
 import pandas as pd
+from analysis.sentiment import metamind_sentiment_json
+from analysis.recommendation_text import recommendation_text_from_result
 
 def ensure_api_key(config: Dict[str, Any]) -> None:
     api_key = config.get("api_key")
@@ -62,6 +63,7 @@ def main():
             with st.spinner("Running sentiment analysis..."):
                 baseline_result = baseline_sentiment_json(llm, selected_review, context, max_retries=1)
                 metamind_result = metamind_sentiment_json(llm, selected_review, context, hypotheses)
+                recommendation_text = recommendation_text_from_result(metamind_result)
 
             left, right = st.columns(2)
             with left:
@@ -70,6 +72,8 @@ def main():
             with right:
                 st.subheader("MetaMind output")
                 st.json(metamind_result)
+                st.subheader("Recommendation")
+                st.write(recommendation_text)
 
             st.success("Analysis complete")
 
