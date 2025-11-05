@@ -26,7 +26,7 @@ def main():
     st.title(" MetaMind Sentiment Demo")
 
     # load the csv of reviews
-    df = pd.read_csv("data/raw/forrestgump_test.csv", header=None, names=["Review"])
+    df = pd.read_csv("data/clean/Iphone.csv", header=None, names=["Review"])
 
     # display the tale
     gb = GridOptionsBuilder.from_dataframe(df)
