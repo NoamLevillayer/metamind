@@ -144,6 +144,68 @@ def extract_aspects_with_llm(
 
     return []
 
+def generate_recommendation_with_llm(
+    llm: BaseLLM,
+    user_input: str,
+    conversation_context: List[Dict[str, str]],
+    aspects: List[Dict[str, Any]],
+    polarity: str,
+    intensity: float,
+    max_retries: int = 1,
+) -> Dict[str, Any]:
+    """
+    Third-stage insight generator. Produces a concise JSON with:
+    - summary: one-sentence overview
+    - drivers: brief explanation referencing aspects/evidence
+    - actions: short recommendations list (may be empty for positive sentiment)
+    """
+    C_t = _format_context(conversation_context)
+    aspects_json = str(aspects)
+    prompt = EXTRA_SENTIMENT_PROMPTS["RECOMMENDATION_SUMMARY_JSON"].format(
+        u_t=user_input,
+        C_t=C_t,
+        polarity=polarity,
+        intensity=intensity,
+        aspects_json=aspects_json,
+    )
+
+    last_text = None
+    for _ in range(max_retries + 1):
+        last_text = llm.generate(prompt, temperature=0.3, max_tokens=240)
+        parsed = parse_json_from_string(last_text)
+        if parsed and all(k in parsed for k in ("summary", "drivers", "actions")):
+            return {
+                "summary": str(parsed.get("summary", "")).strip(),
+                "drivers": str(parsed.get("drivers", "")).strip(),
+                "actions": [str(a) for a in (parsed.get("actions") or [])],
+            }
+        prompt += "\nIMPORTANT: Output ONLY valid JSON with keys summary, drivers, actions."
+
+    # Deterministic fallback
+    pos_aspects = [a for a in aspects if str(a.get("sentiment", "")).lower() == "positive"]
+    neg_aspects = [a for a in aspects if str(a.get("sentiment", "")).lower() == "negative"]
+
+    if str(polarity).lower() == "positive":
+        why = ", ".join({a.get("name", "") for a in pos_aspects if a.get("name")}) or "positive experience"
+        return {
+            "summary": "Overall positive: customer appears satisfied.",
+            "drivers": f"Strengths in {why}.",
+            "actions": ["Maintain strengths and monitor for consistency."],
+        }
+    else:
+        issues = ", ".join({a.get("name", "") for a in neg_aspects if a.get("name")}) or "some issues"
+        actions: List[str] = []
+        for a in neg_aspects[:3]:
+            name = a.get("name") or "an issue"
+            actions.append(f"Investigate and address {name}.")
+        if not actions:
+            actions = ["Review user feedback and prioritize top pain points."]
+        return {
+            "summary": "Neutral/negative: improvement opportunities identified.",
+            "drivers": f"Concerns around {issues}.",
+            "actions": actions,
+        }
+
 def metamind_sentiment_json(
     llm: BaseLLM,
     user_input: str,
@@ -171,10 +233,24 @@ def metamind_sentiment_json(
         synth.setdefault("evidence", "Consolidated from top hypotheses.")
         synth["confidence"] = max(float(synth.get("confidence", 0.6)), conf0)
         synth["source"] = "metamind"
+        # Third-stage: generate concise recommendations based on aspects
+        try:
+            recommendation = generate_recommendation_with_llm(
+                llm=llm,
+                user_input=user_input,
+                conversation_context=conversation_context,
+                aspects=synth.get("aspects", []),
+                polarity=synth.get("polarity", "neutral"),
+                intensity=float(synth.get("intensity", 0.5)),
+            )
+            if recommendation:
+                synth["recommendation"] = recommendation
+        except Exception:
+            pass
         return synth
 
     # Fallback: heuristic + aspects
-    return {
+    result = {
         "polarity": pol,
         "intensity": 0.6 if pol != "neutral" else 0.5,
         "aspects": aspects,
@@ -182,3 +258,18 @@ def metamind_sentiment_json(
         "confidence": conf0,
         "source": "metamind",
     }
+    # Attempt recommendation generation even on fallback
+    try:
+        recommendation = generate_recommendation_with_llm(
+            llm=llm,
+            user_input=user_input,
+            conversation_context=conversation_context,
+            aspects=aspects,
+            polarity=pol,
+            intensity=result["intensity"],
+        )
+        if recommendation:
+            result["recommendation"] = recommendation
+    except Exception:
+        pass
+    return result

@@ -265,9 +265,34 @@ Rules:
 }}
 """
 
+# Recommendation/Insight JSON Prompt based on aspects and sentiment
+RECOMMENDATION_SUMMARY_JSON = """
+Create a concise business insight and recommendation based on the user's sentiment and aspects.
+
+Inputs:
+- User Input (u_t): {u_t}
+- Conversational Context (C_t):
+{C_t}
+- Sentiment Polarity: {polarity}
+- Sentiment Intensity: {intensity}
+- Aspects (JSON array of objects with name, sentiment, evidence):
+{aspects_json}
+
+Rules:
+- If polarity is positive: briefly state that the customer is satisfied and why (reference aspects and evidence where possible). Keep actions minimal.
+- If polarity is neutral or negative: provide a short set of actionable recommendations (2-4 bullets) aligned to the aspects and evidence.
+- Output ONLY valid JSON. No preamble or code fences.
+- Schema:
+{{
+  "summary": str,          # one-sentence overview
+  "drivers": str,          # brief explanation of why (referencing aspects)
+  "actions": [str]         # short actionable recommendations (can be empty if positive)
+}}
+"""
 
 EXTRA_SENTIMENT_PROMPTS = {
     "BASELINE_SENTIMENT_JSON": BASELINE_SENTIMENT_JSON,
     "SENTIMENT_SYNTHESIS_JSON": SENTIMENT_SYNTHESIS_JSON,
     "ASPECT_EXTRACTION_JSON": ASPECT_EXTRACTION_JSON,
+    "RECOMMENDATION_SUMMARY_JSON": RECOMMENDATION_SUMMARY_JSON,
 }
