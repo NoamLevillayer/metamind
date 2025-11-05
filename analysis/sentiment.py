@@ -1,8 +1,11 @@
 from typing import Any, Dict, List, Tuple, Optional
+import math
 from llm_interface.base_llm import BaseLLM
 from prompts.prompt_templates import EXTRA_SENTIMENT_PROMPTS
 from utils.helpers import parse_json_from_string
-from config import SENTIMENT_CUES, SENTIMENT_WEIGHTS
+from config import SENTIMENT_CUES, SENTIMENT_WEIGHTS, TOM_AGENT_CONFIG, DOMAIN_AGENT_CONFIG
+from agents import ToMAgent, DomainAgent
+from memory import SocialMemory
 
 def _normalize_weights(values: List[float]) -> List[float]:
     total = sum(values)
@@ -217,6 +220,47 @@ def metamind_sentiment_json(
 
     Returns an approximate SentimentResult-like dict. Pipeline may normalize via schema.
     """
+    # Enrich or create hypotheses via ToM + Domain when not provided
+    if not hypotheses:
+        try:
+            social_memory = SocialMemory(llm_interface=llm)
+            tom_agent = ToMAgent(config=TOM_AGENT_CONFIG, llm_interface=llm, social_memory_interface=social_memory)
+            domain_agent = DomainAgent(config=DOMAIN_AGENT_CONFIG, llm_interface=llm, social_memory_interface=social_memory)
+
+            tom_hypotheses = tom_agent.process(user_input=user_input, conversation_context=conversation_context) or []
+
+            formatted_context = domain_agent._format_conversation_context(conversation_context)  # type: ignore[attr-defined]
+            social_summary = str(social_memory.get_summary(user_id="default_user"))
+
+            enriched: List[Dict[str, Any]] = []
+            epsilon = getattr(domain_agent, "epsilon", 1e-9)
+            lambda_w = getattr(domain_agent, "lambda_weight", 0.6)
+            for h in tom_hypotheses:
+                try:
+                    p_cond = domain_agent._get_conditional_probability(h, user_input, formatted_context, social_summary)  # type: ignore[attr-defined]
+                except Exception:
+                    p_cond = 0.5
+                try:
+                    p_prior = domain_agent._get_prior_probability(h)  # type: ignore[attr-defined]
+                except Exception:
+                    p_prior = 0.5
+                try:
+                    ig = math.log(max(p_cond, 0.0) + epsilon) - math.log(max(p_prior, 0.0) + epsilon)
+                except Exception:
+                    ig = 0.0
+                score = (lambda_w * float(p_cond)) + ((1 - lambda_w) * float(ig))
+
+                h2 = dict(h)
+                h2["p_cond"] = float(p_cond)
+                h2["p_prior"] = float(p_prior)
+                h2["ig"] = float(ig)
+                h2["score"] = float(score)
+                enriched.append(h2)
+
+            hypotheses = enriched
+        except Exception:
+            hypotheses = []
+
     # Heuristic first
     pol, conf0 = heuristic_sentiment_from_hypotheses(hypotheses)
     # Try LLM synthesis
