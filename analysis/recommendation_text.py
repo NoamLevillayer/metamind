@@ -14,8 +14,11 @@ def _format_recommendation_text(recommendation: Dict[str, Any]) -> str:
     action_lines = [str(action).strip() for action in actions if str(action).strip()]
 
     if action_lines:
-        first_action = action_lines[0]
-        return f"Consider this: {first_action}"
+        if len(action_lines) == 1:
+            return f"Recommendation: {action_lines[0]}"
+
+        joined_actions = "\n- ".join(action_lines)
+        return f"Recommendations:\n- {joined_actions}"
 
     return "No recommendation available."
 
