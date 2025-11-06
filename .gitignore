@@ -79,6 +79,3 @@ dmypy.json
 
 # Ignore macOS Finder settings files
 .DS_Store
-
-# ignore changes in config.py
-config.py
