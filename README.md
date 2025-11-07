@@ -34,7 +34,7 @@ For a deeper, code‑level pipeline description, see [DOCUMENTATION.md](https://
 
 ## Data Source
 
-The demo dataset comes from [GSMArena review comments](https://www.gsmarena.com/reviewcomm-2886.php).
+The demo dataset is scraped from G [GSMArena review comments](https://www.gsmarena.com/reviewcomm-2886.php).
 
 ## How to Run
 
