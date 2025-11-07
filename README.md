@@ -34,7 +34,7 @@ For a deeper, code‑level pipeline description, see [DOCUMENTATION.md](https://
 
 ## Data Source
 
-The demo dataset is scraped from G [GSMArena review comments](https://www.gsmarena.com/reviewcomm-2886.php).
+The demo datasets are scraped from GSMArena review comments ([Iphone](https://www.gsmarena.com/reviewcomm-2886.php), [Samsung](https://www.gsmarena.com/reviewcomm-2880p2.php)).
 
 ## How to Run
 
@@ -44,7 +44,7 @@ Create a virtual environment and activate it:
 
 ``` bash
 python -m venv .venv
-# Windows (PowerShell)
+# Windows
 .\venv\Scripts\activate
 # macOS/Linux
 source .venv/bin/activate
