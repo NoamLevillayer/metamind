@@ -1,6 +1,7 @@
 import json
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
+import altair as alt
 from typing import Any, Dict
 import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder
@@ -14,7 +15,7 @@ from analysis.sentiment import metamind_sentiment_json
 from analysis.recommendation_text import recommendation_text_from_result
 
 
-# --- Fonctions load_llm de votre ami (Inchangées) ---
+# --- Fonctions load_llm (Inchangées) ---
 def ensure_api_key(config: Dict[str, Any]) -> None:
     api_key = config.get("api_key")
     if not api_key or api_key in {"your_api_key_here", "replace_me"}:
@@ -29,34 +30,33 @@ def load_llm() -> OpenAILLM:
     return OpenAILLM(LLM_CONFIG)
 
 
-# === DÉBUT : Fonctions de Dashboard pré-calculé (Inchangées) ===
+# === DÉBUT : Fonctions de Dashboard pré-calculé (MODIFIÉES POUR LE CACHE) ===
 
 @st.cache_data
 def load_deep_dive_data(path: str) -> pd.DataFrame:
     """Loads the pre-computed JSONL data into a DataFrame."""
-    try:
-        with open(path, 'r') as f:
+    with open(path, 'r') as f:
             data = [json.loads(line) for line in f]
-        df = pd.DataFrame(data)
-        if "baseline_result" not in df.columns or "metamind_result" not in df.columns:
+            df = pd.DataFrame(data)
+    if "baseline_result" not in df.columns or "metamind_result" not in df.columns:
             st.error(f"Error: The file '{path}' is corrupt or incomplete.")
             st.stop()
-        return df
-    except FileNotFoundError:
-        st.error(f"Error: 'Deep Dive' file ({path}) not found.")
-        st.info("Please run the `python precompute_deepdive.py` script first.")
-        st.stop()
-    except json.JSONDecodeError:
-        st.error(f"Error: Could not read file '{path}'. Is it a valid JSONL format?")
-        st.stop()
+    return df
 
 
+
+
+# --- CORRECTION (1/3) : Chaînage de cache ---
 @st.cache_data
-def get_processed_data(df_raw: pd.DataFrame) -> pd.DataFrame:
+def get_processed_data() -> pd.DataFrame:
     """
     Transforms the raw DataFrame into a "clean" table for analysis:
     one row per aspect, per review.
+    (This function now loads its own data to avoid hashing errors)
     """
+    # Appel de la fonction cachée. C'est instantané après le 1er chargement.
+    df_raw = load_deep_dive_data("data/clean/deep_dive_results.jsonl")
+
     processed_rows = []
 
     def get_metamind_top_hyp_type(metamind_res):
@@ -113,11 +113,16 @@ def get_processed_data(df_raw: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(processed_rows)
 
 
+# --- CORRECTION (2/3) : Chaînage de cache ---
 @st.cache_data
-def get_review_level_comparison_data(df_raw: pd.DataFrame) -> pd.DataFrame:
+def get_review_level_comparison_data() -> pd.DataFrame:
     """
     Transforms the raw DataFrame into a simple table for anomaly detection.
+    (This function now loads its own data to avoid hashing errors)
     """
+    # Appel de la fonction cachée. C'est instantané après le 1er chargement.
+    df_raw = load_deep_dive_data("data/clean/deep_dive_results.jsonl")
+
     comparison_rows = []
     for index, row in df_raw.iterrows():
         review_text = row.get("review_text")
@@ -141,7 +146,7 @@ def get_review_level_comparison_data(df_raw: pd.DataFrame) -> pd.DataFrame:
 
 def display_kpi_dashboard(df_comparison: pd.DataFrame, df_processed: pd.DataFrame):
     """
-    Displays a top-level summary dashboard with key metrics.
+    Displays a top-level summary dashboard with key metrics. (Inchangée)
     """
     st.header("Executive Summary")
     st.markdown("This dashboard provides a high-level summary of the analysis...")
@@ -175,21 +180,49 @@ def display_kpi_dashboard(df_comparison: pd.DataFrame, df_processed: pd.DataFram
 
 def display_deep_dive_section(df_processed: pd.DataFrame):
     """
-    Displays the complete "Deep Dive" section.
+    Displays the complete 'Deep Dive' section with enhanced visuals and consistent Altair charts.
     """
     st.header("Deep Dive: Aspect-Based Analysis")
-    st.markdown("This section provides a deep dive into specific product aspects...")
+    st.markdown("This section provides a detailed breakdown of the most negative customer aspects.")
 
+    # Filter for negative aspects only
     neg_aspects = df_processed[df_processed['aspect_sentiment'] == 'negative']
     if neg_aspects.empty:
-        st.info("No negative aspects found in the pre-computed data.")
+        st.info("No negative aspects found in the precomputed dataset.")
         return
 
-    top_5_neg_aspects = neg_aspects['aspect_name'].value_counts().nlargest(5)
-    st.subheader("Top 5 Customer Pain Points (Negative Aspects)")
-    st.bar_chart(top_5_neg_aspects)
+    # Compute top 5 negative aspects (most frequent)
+    top_5_neg_aspects = (
+        neg_aspects['aspect_name']
+        .value_counts()
+        .nlargest(5)
+        .sort_values(ascending=False)  # Largest bar at the top
+        .reset_index()
+    )
+    top_5_neg_aspects.columns = ['aspect', 'count']
 
-    selected_aspect = st.selectbox("Select a pain point for a 'Deep Dive'", top_5_neg_aspects.index)
+    st.subheader("Top 5 Negative Customer Pain Points")
+
+    # --- Custom Altair Chart for top 5 aspects ---
+    chart_neg = (
+        alt.Chart(top_5_neg_aspects)
+        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusBottomLeft=4)
+        .encode(
+            x=alt.X('count:Q', title='Number of Mentions'),
+            y=alt.Y('aspect:N', sort='-x', title='Aspect'),
+            color=alt.Color('aspect:N', legend=None),
+            tooltip=[alt.Tooltip('aspect:N', title='Aspect'),
+                     alt.Tooltip('count:Q', title='Mentions')]
+        )
+        .properties(height=250)
+    )
+
+    st.altair_chart(chart_neg, width="stretch")
+
+    selected_aspect = st.selectbox(
+        "Select a pain point for detailed analysis",
+        top_5_neg_aspects['aspect']
+    )
     if not selected_aspect:
         return
 
@@ -197,38 +230,77 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
     aspect_data = df_processed[df_processed['aspect_name'] == selected_aspect]
     col1, col2 = st.columns(2)
 
+    # === LEFT: WordCloud ===
     with col1:
-        st.markdown("**Baseline Analysis: Keyword Cloud**")
-        all_keywords = " ".join(aspect_data['baseline_keywords'])
-        if all_keywords.strip():
-            try:
-                wordcloud = WordCloud(width=400, height=300, background_color='white').generate(all_keywords)
-                fig, ax = plt.subplots()
-                ax.imshow(wordcloud, interpolation='bilinear');
-                ax.axis('off')
-                st.pyplot(fig)
-            except Exception:
-                st.text("Could not generate word cloud.")
-        else:
-            st.info("No evidence keywords found by Baseline.")
+        with st.container(border=True):
+            st.markdown("##### Baseline: Keyword Cloud")
+            all_keywords = " ".join(aspect_data['baseline_keywords'])
 
+            if all_keywords.strip():
+                try:
+                    wordcloud = WordCloud(
+                        width=400,
+                        height=300,
+                        background_color='black',
+                        colormap='viridis',
+                        max_words=75,
+                        collocations=False
+                    ).generate(all_keywords)
+
+                    fig, ax = plt.subplots()
+                    ax.imshow(wordcloud, interpolation='bilinear')
+                    ax.axis('off')
+                    st.pyplot(fig, bbox_inches='tight', pad_inches=0)
+                except Exception:
+                    st.text("Unable to generate the word cloud.")
+            else:
+                st.info("No keywords found from Baseline analysis.")
+
+    # === RIGHT: Altair MetaMind Chart ===
     with col2:
-        st.markdown("**MetaMind Analysis: Mental States**")
-        mental_state_data = aspect_data['review_top_hyp_type'].value_counts()
-        if not mental_state_data.empty:
-            st.bar_chart(mental_state_data)
-            st.markdown(
-                f"**Insight:** When users talk about **{selected_aspect}**, their dominant state is **{mental_state_data.index[0]}**.")
-        else:
-            st.info("No MetaMind data found.")
+        with st.container(border=True):
+            st.markdown("##### MetaMind: State Spirit")
+
+            mental_state_data = (
+                aspect_data['review_top_hyp_type']
+                .value_counts()
+                .sort_values(ascending=False) # largest bar at the top
+                .reset_index()
+            )
+            mental_state_data.columns = ['state', 'count']
+
+            if not mental_state_data.empty:
+                chart = (
+                    alt.Chart(mental_state_data)
+                    .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
+                    .encode(
+                        x=alt.X('count:Q', title='Number'),
+                        y=alt.Y('state:N', sort=None, title='Mental State'),
+                        color=alt.Color('state:N', legend=None),
+                        tooltip=[alt.Tooltip('state:N', title='State'),
+                                 alt.Tooltip('count:Q', title='Count')]
+                    )
+                    .properties(height=250)
+                )
+
+                st.altair_chart(chart, width="stretch")
+
+                dominant_state = mental_state_data.iloc[-1]['state']
+                st.markdown(
+                    f"**Insight:** When users discuss **{selected_aspect}**, "
+                    f"their dominant state is **{dominant_state}**."
+                )
+            else:
+                st.info("No MetaMind data found for this aspect.")
+
 
 
 def display_anomaly_section(df_comparison: pd.DataFrame):
     """
-    Displays the "Anomalies & Sarcasm Detector" section.
+    Displays the "Anomalies & Sarcasm Detector" section. (Version Améliorée)
     """
-    st.header("Anomaly & Sarcasm Detector")
-    st.markdown("This table shows all reviews where the Baseline and MetaMind analyses disagreed...")
+    st.header("⚠ Anomaly & Sarcasm Detector")  # <--- MODIFIÉ : Emoji
+    st.markdown("This table shows all the reviews for which the Baseline and MetaMind analyses disagreed...")
 
     df_anomalies = df_comparison[
         df_comparison["Baseline Sentiment"] != df_comparison["MetaMind Sentiment"]
@@ -239,36 +311,69 @@ def display_anomaly_section(df_comparison: pd.DataFrame):
         ]
 
     if df_anomalies.empty:
-        st.info("No anomalies or disagreements found.")
+        st.info("Aucune anomalie ou désaccord trouvé.")
         return
 
-    st.subheader(f"Analysis of {len(df_anomalies)} disagreements found:")
+    st.subheader(f"Analyse de {len(df_anomalies)} désaccords trouvés :")
+
     gb = GridOptionsBuilder.from_dataframe(df_anomalies)
-    gb.configure_column("Index", flex=0.5);
-    gb.configure_column("Review", flex=3, wrapText=True, autoHeight=True)
-    gb.configure_column("Baseline Sentiment", flex=1);
-    gb.configure_column("MetaMind Sentiment", flex=1)
+
+    # <--- MODIFIÉ : Définition d'un style pour centrer
+    cell_style_centered = {'textAlign': 'center'}
+
+    gb.configure_column(
+        "Index",
+        flex=0.5,
+        cellStyle=cell_style_centered  # Centré
+    )
+    gb.configure_column(
+        "Review",
+        flex=3,
+        wrapText=True,
+        autoHeight=True
+        # Non centré (gauche) pour la lisibilité
+    )
+    gb.configure_column(
+        "Baseline Sentiment",
+        flex=1,
+        cellStyle=cell_style_centered  # Centré
+    )
+    gb.configure_column(
+        "MetaMind Sentiment",
+        flex=1,
+        cellStyle=cell_style_centered  # Centré
+    )
+
     grid_options = gb.build()
-    AgGrid(df_anomalies, gridOptions=grid_options, height=400, width='100%', theme="streamlit",
-           fit_columns_on_grid_load=True)
+
+    AgGrid(
+        df_anomalies,
+        gridOptions=grid_options,
+        height=400,
+        width='100%',
+        theme="streamlit",
+        fit_columns_on_grid_load=True
+    )
 
 
-# === FIN DES AJOUTS ===
+# === FIN DES MODIFICATIONS ===
 
 
-# --- Main Application (Fusionnée) ---
+# --- Main Application (Fusionnée et Corrigée) ---
 
 def main():
     st.set_page_config(page_title="MetaMind Sentiment Demo", layout="wide")
     st.title(" MetaMind Sentiment Demo")
 
     # === 1. Chargement des données pré-calculées (Pour les Dashboards) ===
+    # --- CORRECTION (3/3) : Appels de fonctions sans argument ---
     try:
-        df_raw = load_deep_dive_data("data/clean/deep_dive_results.jsonl")
-        df_processed = get_processed_data(df_raw)
-        df_comparison = get_review_level_comparison_data(df_raw)
+        # Ces fonctions appellent maintenant load_deep_dive_data() en interne.
+        # Le cache de Streamlit gère l'efficacité.
+        df_processed = get_processed_data()
+        df_comparison = get_review_level_comparison_data()
 
-        # Affichage des Dashboards (AJOUTÉ)
+        # Affichage des Dashboards
         display_kpi_dashboard(df_comparison, df_processed)
 
     except Exception as e:
@@ -278,18 +383,28 @@ def main():
         df_processed = pd.DataFrame()
         df_comparison = pd.DataFrame()
 
-    # === 2. Section d'Analyse en Direct (Originale, mais modifiée) ===
+    # === 2. Section d'Analyse en Direct ===
     st.divider()
     st.header("Individual Analysis (Live Test)")
-    st.markdown("Select any review from the table below to run a real-time analysis.")
+    st.markdown(" Select any review of the table below to run a real - time analysis")
 
-    # --- MODIFICATION : Chargement du CSV pour ce tableau ---
+    # --- Chargement du CSV pour ce tableau ---
     try:
         # load the csv of reviews from config
         csv_path = DATASET_CONFIG.get("reviews_csv_path")
-        df_csv = pd.read_csv("data/clean/SamsungS25FE.csv", header=None, names=["Review"], sep="\t")
-    except Exception as e:
+        if not csv_path:
+            st.error("Error: 'reviews_csv_path' not set in config.py (DATASET_CONFIG).")
+            st.stop()
+
+        # --- CORRECTION (Bonus) : Utilisation de la variable csv_path ---
+        df_csv = pd.read_csv(csv_path, header=None, names=["Review"], sep="\t")
+
+    except FileNotFoundError:
         st.error(f"Could not load the reviews CSV file from path: {csv_path}")
+        st.info(f"Please check the 'reviews_csv_path' in your config.py file.")
+        st.stop()
+    except Exception as e:
+        st.error(f"An error occurred loading {csv_path}")
         st.info(f"Error details: {e}")
         st.stop()
     # --- FIN DE LA MODIFICATION ---
@@ -300,7 +415,7 @@ def main():
     grid_options = gb.build()
 
     grid_response = AgGrid(
-        df_csv,  # <-- Modifié pour utiliser df_csv
+        df_csv,
         gridOptions=grid_options,
         height=250,
         theme="streamlit",
@@ -324,14 +439,11 @@ def main():
         if st.button("Analyze sentiment", type="primary"):
             llm = load_llm()
             context = []
-            hypotheses = []  # <-- Gardé pour l'appel à 4 arguments
+            hypotheses = []
 
             with st.spinner("Running sentiment analysis..."):
                 baseline_result = baseline_sentiment_json(llm, selected_review, context, max_retries=1)
-
-                # --- Appel à 4 arguments (inchangé) ---
                 metamind_result = metamind_sentiment_json(llm, selected_review, context, hypotheses)
-
                 recommendation_text = recommendation_text_from_result(metamind_result)
 
             left, right = st.columns(2)
@@ -349,7 +461,7 @@ def main():
     else:
         st.info("Click on a review in the table to select it.")
 
-    # === 3. Affichage des autres dashboards (AJOUTÉ) ===
+    # === 3. Affichage des autres dashboards ===
     st.divider()
     display_deep_dive_section(df_processed)
     st.divider()
