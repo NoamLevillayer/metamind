@@ -115,13 +115,13 @@ def get_processed_data() -> pd.DataFrame:
 
 # --- CORRECTION (2/3) : Chaînage de cache ---
 @st.cache_data
-def get_review_level_comparison_data() -> pd.DataFrame:
+def get_review_level_comparison_data(path: str = "data/clean/deep_dive_results.jsonl") -> pd.DataFrame:
     """
     Transforms the raw DataFrame into a simple table for anomaly detection.
     (This function now loads its own data to avoid hashing errors)
     """
     # Appel de la fonction cachée. C'est instantané après le 1er chargement.
-    df_raw = load_deep_dive_data("data/clean/deep_dive_results.jsonl")
+    df_raw = load_deep_dive_data(path)
 
     comparison_rows = []
     for index, row in df_raw.iterrows():
@@ -371,7 +371,8 @@ def main():
         # Ces fonctions appellent maintenant load_deep_dive_data() en interne.
         # Le cache de Streamlit gère l'efficacité.
         df_processed = get_processed_data()
-        df_comparison = get_review_level_comparison_data()
+        df_comparison = get_review_level_comparison_data("data/clean/deep_dive_results.jsonl")
+
 
         # Affichage des Dashboards
         display_kpi_dashboard(df_comparison, df_processed)
