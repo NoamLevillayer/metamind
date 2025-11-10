@@ -155,21 +155,11 @@ def display_kpi_dashboard(df_comparison: pd.DataFrame, df_processed: pd.DataFram
     df_anomalies = df_comparison[
         df_comparison["Baseline Sentiment"] != df_comparison["MetaMind Sentiment"]
         ].copy()
-    df_anomalies = df_anomalies[
-        (df_anomalies["Baseline Sentiment"] != "n/a") &
-        (df_anomalies["MetaMind Sentiment"] != "n/a")
-        ]
     total_anomalies = len(df_anomalies)
 
-    if total_reviews > 0:
-        correction_rate = (total_anomalies / total_reviews) * 100
-    else:
-        correction_rate = 0
+    correction_rate = (total_anomalies / total_reviews) * 100
 
-    try:
-        top_driver = df_processed['review_top_hyp_type'].value_counts().index[0]
-    except IndexError:
-        top_driver = "N/A"
+    top_driver = df_processed['review_top_hyp_type'].value_counts().index[0]
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Reviews Analyzed", f"{total_reviews}")
@@ -187,9 +177,6 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
 
     # Filter for negative aspects only
     neg_aspects = df_processed[df_processed['aspect_sentiment'] == 'negative']
-    if neg_aspects.empty:
-        st.info("No negative aspects found in the precomputed dataset.")
-        return
 
     # Compute top 5 negative aspects (most frequent)
     top_5_neg_aspects = (
@@ -211,24 +198,24 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
             x=alt.X('count:Q', title='Number of Mentions'),
             y=alt.Y('aspect:N', sort='-x', title='Aspect'),
             color=alt.Color('aspect:N', legend=None),
-            tooltip=[alt.Tooltip('aspect:N', title='Aspect'),
-                     alt.Tooltip('count:Q', title='Mentions')]
+            tooltip=[alt.Tooltip('state:N', title='State'),
+                     alt.Tooltip('count:Q', title='Count')]
         )
-        .properties(height=250)
+        .properties(height=400)
     )
 
     st.altair_chart(chart_neg, width="stretch")
 
     selected_aspect = st.selectbox(
         "Select a pain point for detailed analysis",
-        top_5_neg_aspects['aspect']
+        top_5_neg_aspects['aspect'],width=250
     )
     if not selected_aspect:
         return
 
     st.subheader(f"Comparison: Baseline vs. MetaMind for '{selected_aspect}'")
     aspect_data = df_processed[df_processed['aspect_name'] == selected_aspect]
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([1,2])
 
     # === LEFT: WordCloud ===
     with col1:
@@ -241,16 +228,17 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
                     wordcloud = WordCloud(
                         width=400,
                         height=300,
-                        background_color='black',
-                        colormap='viridis',
+                        background_color="#333333",
+                        colormap='RdGy',
                         max_words=75,
                         collocations=False
                     ).generate(all_keywords)
 
-                    fig, ax = plt.subplots()
+                    fig, ax = plt.subplots(figsize=(2, 2))
                     ax.imshow(wordcloud, interpolation='bilinear')
                     ax.axis('off')
                     st.pyplot(fig, bbox_inches='tight', pad_inches=0)
+
                 except Exception:
                     st.text("Unable to generate the word cloud.")
             else:
@@ -272,20 +260,22 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
             if not mental_state_data.empty:
                 chart = (
                     alt.Chart(mental_state_data)
-                    .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
+                    .mark_bar(cornerRadiusTopRight=8, cornerRadiusBottomRight=8)
                     .encode(
                         x=alt.X('count:Q', title='Number'),
                         y=alt.Y('state:N', sort=None, title='Mental State'),
-                        color=alt.Color('state:N', legend=None),
+                        color=alt.Color('count:Q',
+                                        scale = alt.Scale(scheme='reds'),
+                                        legend=None
+                                        ),
                         tooltip=[alt.Tooltip('state:N', title='State'),
                                  alt.Tooltip('count:Q', title='Count')]
                     )
-                    .properties(height=250)
+                    .properties(width=800, height=400)
                 )
-
                 st.altair_chart(chart, width="stretch")
 
-                dominant_state = mental_state_data.iloc[-1]['state']
+                dominant_state = mental_state_data.iloc[0]['state']
                 st.markdown(
                     f"**Insight:** When users discuss **{selected_aspect}**, "
                     f"their dominant state is **{dominant_state}**."
@@ -293,13 +283,11 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
             else:
                 st.info("No MetaMind data found for this aspect.")
 
-
-
 def display_anomaly_section(df_comparison: pd.DataFrame):
     """
     Displays the "Anomalies & Sarcasm Detector" section. (Version Améliorée)
     """
-    st.header("⚠ Anomaly & Sarcasm Detector")  # <--- MODIFIÉ : Emoji
+    st.header("⚠ Anomaly & Sarcasm Detector")
     st.markdown("This table shows all the reviews for which the Baseline and MetaMind analyses disagreed...")
 
     df_anomalies = df_comparison[
@@ -314,7 +302,7 @@ def display_anomaly_section(df_comparison: pd.DataFrame):
         st.info("Aucune anomalie ou désaccord trouvé.")
         return
 
-    st.subheader(f"Analyse de {len(df_anomalies)} désaccords trouvés :")
+    st.subheader(f"Analysis of {len(df_anomalies)} disagreements found:")
 
     gb = GridOptionsBuilder.from_dataframe(df_anomalies)
 
