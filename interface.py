@@ -6,16 +6,16 @@ from typing import Any, Dict
 import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder
 
-# --- Imports (Mise à jour pour inclure DATASET_CONFIG) ---
+
 from baselines.raw_sentiment import baseline_sentiment_json
-from config import LLM_CONFIG, DATASET_CONFIG  # DATASET_CONFIG est nécessaire pour le CSV
+from config import LLM_CONFIG, DATASET_CONFIG  
 from llm_interface.openai_llm import OpenAILLM
 import pandas as pd
 from analysis.sentiment import metamind_sentiment_json
 from analysis.recommendation_text import recommendation_text_from_result
 
 
-# --- Fonctions load_llm (Inchangées) ---
+
 def ensure_api_key(config: Dict[str, Any]) -> None:
     api_key = config.get("api_key")
     if not api_key or api_key in {"your_api_key_here", "replace_me"}:
@@ -30,7 +30,7 @@ def load_llm() -> OpenAILLM:
     return OpenAILLM(LLM_CONFIG)
 
 
-# === DÉBUT : Fonctions de Dashboard pré-calculé (MODIFIÉES POUR LE CACHE) ===
+
 
 @st.cache_data
 def load_deep_dive_data(path: str) -> pd.DataFrame:
@@ -46,15 +46,11 @@ def load_deep_dive_data(path: str) -> pd.DataFrame:
 
 
 
-# --- CORRECTION (1/3) : Chaînage de cache ---
+
 @st.cache_data
 def get_processed_data() -> pd.DataFrame:
-    """
-    Transforms the raw DataFrame into a "clean" table for analysis:
-    one row per aspect, per review.
-    (This function now loads its own data to avoid hashing errors)
-    """
-    # Appel de la fonction cachée. C'est instantané après le 1er chargement.
+
+    
     df_raw = load_deep_dive_data("data/clean/deep_dive_results.jsonl")
 
     processed_rows = []
@@ -113,14 +109,15 @@ def get_processed_data() -> pd.DataFrame:
     return pd.DataFrame(processed_rows)
 
 
-# --- CORRECTION (2/3) : Chaînage de cache ---
+
 @st.cache_data
 def get_review_level_comparison_data(path: str = "data/clean/deep_dive_results.jsonl") -> pd.DataFrame:
     """
     Transforms the raw DataFrame into a simple table for anomaly detection.
     (This function now loads its own data to avoid hashing errors)
     """
-    # Appel de la fonction cachée. C'est instantané après le 1er chargement.
+    
+    df_raw = load_deep_dive_data("data/clean/deep_dive_results.jsonl")
     df_raw = load_deep_dive_data(path)
 
     comparison_rows = []
@@ -175,22 +172,22 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
     st.header("Deep Dive: Aspect-Based Analysis")
     st.markdown("This section provides a detailed breakdown of the most negative customer aspects.")
 
-    # Filter for negative aspects only
+
     neg_aspects = df_processed[df_processed['aspect_sentiment'] == 'negative']
 
-    # Compute top 5 negative aspects (most frequent)
+ 
     top_5_neg_aspects = (
         neg_aspects['aspect_name']
         .value_counts()
         .nlargest(5)
-        .sort_values(ascending=False)  # Largest bar at the top
+        .sort_values(ascending=False)  
         .reset_index()
     )
     top_5_neg_aspects.columns = ['aspect', 'count']
 
     st.subheader("Top 5 Negative Customer Pain Points")
 
-    # --- Custom Altair Chart for top 5 aspects ---
+
     chart_neg = (
         alt.Chart(top_5_neg_aspects)
         .mark_bar(cornerRadiusTopLeft=4, cornerRadiusBottomLeft=4)
@@ -217,7 +214,7 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
     aspect_data = df_processed[df_processed['aspect_name'] == selected_aspect]
     col1, col2 = st.columns([1,2])
 
-    # === LEFT: WordCloud ===
+
     with col1:
         with st.container(border=True):
             st.markdown("##### Baseline: Keyword Cloud")
@@ -244,7 +241,7 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
             else:
                 st.info("No keywords found from Baseline analysis.")
 
-    # === RIGHT: Altair MetaMind Chart ===
+   
     with col2:
         with st.container(border=True):
             st.markdown("##### MetaMind: State Spirit")
@@ -252,7 +249,7 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
             mental_state_data = (
                 aspect_data['review_top_hyp_type']
                 .value_counts()
-                .sort_values(ascending=False) # largest bar at the top
+                .sort_values(ascending=False) 
                 .reset_index()
             )
             mental_state_data.columns = ['state', 'count']
@@ -284,9 +281,7 @@ def display_deep_dive_section(df_processed: pd.DataFrame):
                 st.info("No MetaMind data found for this aspect.")
 
 def display_anomaly_section(df_comparison: pd.DataFrame):
-    """
-    Displays the "Anomalies & Sarcasm Detector" section. (Version Améliorée)
-    """
+
     st.header("⚠ Anomaly & Sarcasm Detector")
     st.markdown("This table shows all the reviews for which the Baseline and MetaMind analyses disagreed...")
 
@@ -299,37 +294,37 @@ def display_anomaly_section(df_comparison: pd.DataFrame):
         ]
 
     if df_anomalies.empty:
-        st.info("Aucune anomalie ou désaccord trouvé.")
+        st.info("None anomalies or disagreements found.")
         return
 
     st.subheader(f"Analysis of {len(df_anomalies)} disagreements found:")
 
     gb = GridOptionsBuilder.from_dataframe(df_anomalies)
 
-    # <--- MODIFIÉ : Définition d'un style pour centrer
+    
     cell_style_centered = {'textAlign': 'center'}
 
     gb.configure_column(
         "Index",
         flex=0.5,
-        cellStyle=cell_style_centered  # Centré
+        cellStyle=cell_style_centered  
     )
     gb.configure_column(
         "Review",
         flex=3,
         wrapText=True,
         autoHeight=True
-        # Non centré (gauche) pour la lisibilité
+        
     )
     gb.configure_column(
         "Baseline Sentiment",
         flex=1,
-        cellStyle=cell_style_centered  # Centré
+        cellStyle=cell_style_centered  
     )
     gb.configure_column(
         "MetaMind Sentiment",
         flex=1,
-        cellStyle=cell_style_centered  # Centré
+        cellStyle=cell_style_centered  
     )
 
     grid_options = gb.build()
@@ -344,48 +339,46 @@ def display_anomaly_section(df_comparison: pd.DataFrame):
     )
 
 
-# === FIN DES MODIFICATIONS ===
 
 
-# --- Main Application (Fusionnée et Corrigée) ---
+
+
 
 def main():
     st.set_page_config(page_title="MetaMind Sentiment Demo", layout="wide")
     st.title(" MetaMind Sentiment Demo")
 
-    # === 1. Chargement des données pré-calculées (Pour les Dashboards) ===
-    # --- CORRECTION (3/3) : Appels de fonctions sans argument ---
+
     try:
-        # Ces fonctions appellent maintenant load_deep_dive_data() en interne.
-        # Le cache de Streamlit gère l'efficacité.
+ 
         df_processed = get_processed_data()
         df_comparison = get_review_level_comparison_data("data/clean/deep_dive_results.jsonl")
 
 
-        # Affichage des Dashboards
+        
         display_kpi_dashboard(df_comparison, df_processed)
 
     except Exception as e:
         st.error(f"Failed to load dashboard data: {e}")
         st.info("Live Analysis Only mode. Pre-computed dashboards are disabled.")
-        # Initialiser des dataframes vides pour que l'app ne plante pas
+        
         df_processed = pd.DataFrame()
         df_comparison = pd.DataFrame()
 
-    # === 2. Section d'Analyse en Direct ===
+    
     st.divider()
     st.header("Individual Analysis (Live Test)")
     st.markdown(" Select any review of the table below to run a real - time analysis")
 
-    # --- Chargement du CSV pour ce tableau ---
+    
     try:
-        # load the csv of reviews from config
+        
         csv_path = DATASET_CONFIG.get("reviews_csv_path")
         if not csv_path:
             st.error("Error: 'reviews_csv_path' not set in config.py (DATASET_CONFIG).")
             st.stop()
 
-        # --- CORRECTION (Bonus) : Utilisation de la variable csv_path ---
+        
         df_csv = pd.read_csv(csv_path, header=None, names=["Review"], sep="\t")
 
     except FileNotFoundError:
@@ -396,9 +389,9 @@ def main():
         st.error(f"An error occurred loading {csv_path}")
         st.info(f"Error details: {e}")
         st.stop()
-    # --- FIN DE LA MODIFICATION ---
+    
 
-    # display the tale (Utilise df_csv)
+   
     gb = GridOptionsBuilder.from_dataframe(df_csv)
     gb.configure_selection("single", use_checkbox=False)
     grid_options = gb.build()
@@ -450,7 +443,7 @@ def main():
     else:
         st.info("Click on a review in the table to select it.")
 
-    # === 3. Affichage des autres dashboards ===
+    
     st.divider()
     display_deep_dive_section(df_processed)
     st.divider()

@@ -1,5 +1,8 @@
+altair
+matplotlib
 openai
+pandas
 python-dotenv
 streamlit
 streamlit-aggrid
-pandas
+wordcloud
